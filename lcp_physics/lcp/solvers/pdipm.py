@@ -15,7 +15,7 @@ shown_btrifact_warning = False
 def btrifact_hack(x):
     global shown_btrifact_warning
     try:
-        return x.btrifact(pivot=not x.is_cuda)
+        return x.lu(pivot=False)
     except TypeError:
         if not shown_btrifact_warning:
             print("""----------
@@ -25,7 +25,7 @@ to get a version that disables pivoting on the GPU.
 ----------
 """)
             shown_btrifact_warning = True
-        return x.btrifact()
+        return x.lu()
 
 
 INACC_ERR = """
@@ -330,7 +330,7 @@ def solve_kkt(Q_LU, d, G, A, S_LU, rx, rs, rz, ry):
 
     nineq, nz, neq, nBatch = get_sizes(G, A)
 
-    invQ_rx = rx.btrisolve(*Q_LU)  # Q-1 rx
+    invQ_rx = rx[..., None].lu_solve(*Q_LU)[..., 0]  # Q-1 rx
     if neq > 0:
         # A Q-1 rx - ry
         # G Q-1 rx + rs / d - rz
@@ -339,14 +339,14 @@ def solve_kkt(Q_LU, d, G, A, S_LU, rx, rs, rz, ry):
     else:
         h = invQ_rx.unsqueeze(1).bmm(G.transpose(1, 2)).squeeze(1) + rs / d - rz
 
-    w = -(h.btrisolve(*S_LU))  # S-1 h =
+    w = -(h[..., None].lu_solve(*S_LU)[..., 0])  # S-1 h =
 
     g1 = -rx - w[:, neq:].unsqueeze(1).bmm(G).squeeze(1)  # -rx - GT w = -rx -GT S-1 h
     if neq > 0:
         g1 -= w[:, :neq].unsqueeze(1).bmm(A).squeeze(1)  # - AT w = -AT S-1 h
     g2 = -rs - w[:, neq:]
 
-    dx = g1.btrisolve(*Q_LU)  # Q-1 g1 = - Q-1 AT S-1 h
+    dx = g1[..., None].lu_solve(*Q_LU)[..., 0]  # Q-1 g1 = - Q-1 AT S-1 h
     ds = g2 / d  # g2 / d = (-rs - w) / d
     dz = w[:, neq:]
     dy = w[:, :neq] if neq > 0 else None
@@ -375,7 +375,7 @@ a non-zero diagonal.
     # See the 'Block LU factorization' part of our website
     # for more details.
 
-    G_invQ_GT = torch.bmm(G, G.transpose(1, 2).btrisolve(*Q_LU)) + F
+    G_invQ_GT = torch.bmm(G, G.transpose(1, 2).lu_solve(*Q_LU)) + F
     R = G_invQ_GT.clone()
     S_LU_pivots = torch.IntTensor(range(1, 1 + neq + nineq)).unsqueeze(0) \
         .repeat(nBatch, 1).type_as(Q).int()

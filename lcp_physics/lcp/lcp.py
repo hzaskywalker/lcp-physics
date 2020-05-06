@@ -143,7 +143,7 @@ class LCPFunction(Function):
             dl_dx = None
             if len(x.size()) > 0:
                 jacobian = get_numerical_jacobian(self.forward, inputs, target=x.squeeze(0),
-                                                  eps=1e-5).type_as(dl_dzhat)
+                                                  eps=1e-5).double()
                 dl_dx = jacobian.matmul(dl_dzhat.t()).view(x.size())
             grads.append(dl_dx)
         # grads = (dQs, dps, dGs, dhs, dAs, dbs, dFs)
